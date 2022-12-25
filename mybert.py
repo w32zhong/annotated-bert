@@ -57,6 +57,9 @@ class MyBertLayer(torch.nn.Module):
 
         # matmul has broadcast, while @ or mm do not have broadcast!
         attention_scores = query_layer @ key_layer.transpose(-1, -2)
+        # for large values of att_head_sz, the dot products grow large in magnitude,
+        # making the softmax function to have small gradients.
+        # Here, use squared att_head_sz to scale down and counteract this effect.
         attention_scores = attention_scores / math.sqrt(self.att_head_sz)
         # attention_scores.shape == (batch_sz, n_heads, seq_len, seq_len)
         attention_scores = attention_scores + attention_mask # broadcast
