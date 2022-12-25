@@ -26,6 +26,7 @@ class MyBertLayer(torch.nn.Module):
         self.attout_LayerNorm = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
         self.attout_dropout   = torch.nn.Dropout(hidden_dropout_prob)
 
+        # point-wise feed forward (broadcast the same linear transform to all positions)
         self.intermediate        = torch.nn.Linear(hidden_size, intermediate_size)
         self.intermediate_act_fn = torch.nn.functional.gelu
 
