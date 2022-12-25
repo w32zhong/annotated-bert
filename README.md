@@ -1,4 +1,9 @@
-### Run the test
+## Transformer architecture (including the decoder)
+![image](https://user-images.githubusercontent.com/1407530/209479273-71bef891-c714-4296-9a7f-37ae0a43c01c.png)
+
+(https://arxiv.org/abs/1706.03762)
+
+## Run the test
 Run `test.py` for twice, one to unmask using Huggingface's implementation and to save its model checkpoint; another one to load the checkpoint and run our own code to reproduce the predictions:
 ```sh
 $ python test.py
