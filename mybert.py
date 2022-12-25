@@ -15,8 +15,8 @@ intermediate_size = 3072
 class MyBertLayer(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.attention_head_size = hidden_size // num_attention_heads
-        assert self.attention_head_size * num_attention_heads == hidden_size
+        self.att_head_sz = hidden_size // num_attention_heads
+        assert self.att_head_sz * num_attention_heads == hidden_size
         self.query = torch.nn.Linear(hidden_size, hidden_size)
         self.key   = torch.nn.Linear(hidden_size, hidden_size)
         self.value = torch.nn.Linear(hidden_size, hidden_size)
@@ -33,31 +33,33 @@ class MyBertLayer(torch.nn.Module):
         self.out_LayerNorm = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
         self.out_dropout   = torch.nn.Dropout(hidden_dropout_prob)
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
+    def feed_forward_chunk(self, att_out):
+        intermediate_output = self.intermediate(att_out)
         intermediate_output = self.intermediate_act_fn(intermediate_output)
 
         hidden_states = self.out_dense(intermediate_output)
         hidden_states = self.out_dropout(hidden_states)
-        hidden_states = self.out_LayerNorm(hidden_states + attention_output)
+        hidden_states = self.out_LayerNorm(hidden_states + att_out) # skip link
         return hidden_states
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.shape[:-1] + (num_attention_heads, self.attention_head_size)
+        new_x_shape = x.shape[:-1] + (num_attention_heads, self.att_head_sz)
         x = x.view(new_x_shape)
         x = x.permute(0, 2, 1, 3)
         # x.shape == (batch_sz, n_heads, seq_len, head_size)
         return x
 
-    def forward(self, hidden_states, attention_mask):
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        # matmul has broadcast, while @ or mm do not!
+    def forward(self, inputs, attention_mask):
+        # inputs.shape == (batch_sz, seq_len, hidden_size)
+        key_layer = self.transpose_for_scores(self.key(inputs))
+        value_layer = self.transpose_for_scores(self.value(inputs))
+        query_layer = self.transpose_for_scores(self.query(inputs))
+
+        # matmul has broadcast, while @ or mm do not have broadcast!
         attention_scores = query_layer @ key_layer.transpose(-1, -2)
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        attention_scores = attention_scores / math.sqrt(self.att_head_sz)
         # attention_scores.shape == (batch_sz, n_heads, seq_len, seq_len)
-        attention_scores = attention_scores + attention_mask
+        attention_scores = attention_scores + attention_mask # broadcast
         attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
         attention_probs = self.att_dropout(attention_probs)
 
@@ -71,7 +73,7 @@ class MyBertLayer(torch.nn.Module):
 
         logits_layer = self.attout_dense(context_layer)
         logits_layer = self.attout_dropout(logits_layer)
-        logits_layer = self.attout_LayerNorm(logits_layer + hidden_states)
+        logits_layer = self.attout_LayerNorm(logits_layer + inputs) # skip link
 
         layer_output = self.feed_forward_chunk(logits_layer)
         return layer_output
@@ -83,9 +85,12 @@ class MyBERT(torch.nn.Module):
         self.word_embeddings = torch.nn.Linear(vocab_size, hidden_size, bias=False)
         self.token_type_embeddings = torch.nn.Linear(type_vocab_size, hidden_size, bias=False)
         self.position_embeddings = torch.nn.Linear(max_position_embeddings, hidden_size, bias=False)
-        self.LayerNorm = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        self.dropout = torch.nn.Dropout(hidden_dropout_prob)
-        self.layer = torch.nn.ModuleList([MyBertLayer() for _ in range(num_hidden_layers)])
+        self.emb_LayerNorm = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
+        self.emb_dropout = torch.nn.Dropout(hidden_dropout_prob)
+
+        self.layer = torch.nn.ModuleList(
+            [MyBertLayer() for _ in range(num_hidden_layers)]
+        )
 
         self.pretrain_head_dense = torch.nn.Linear(hidden_size, hidden_size)
         self.pretrain_head_actfn = torch.nn.functional.gelu
@@ -94,9 +99,9 @@ class MyBERT(torch.nn.Module):
         self.pretrain_head_bias = torch.nn.Parameter(torch.zeros(vocab_size))
 
     def forward(self, input_ids, token_type_ids, attention_mask):
-        batch_sz, seq_length = input_ids.shape
+        batch_sz, seq_len = input_ids.shape
         position_ids = torch.arange(max_position_embeddings).expand((1, -1))
-        position_ids = position_ids[:, 0:seq_length]
+        position_ids = position_ids[:, 0:seq_len]
 
         input_ids_onehot = torch.nn.functional.one_hot(input_ids, num_classes=vocab_size).to(dtype=torch.float32)
         token_type_ids_onehot = torch.nn.functional.one_hot(token_type_ids, num_classes=type_vocab_size).to(dtype=torch.float32)
@@ -107,26 +112,26 @@ class MyBERT(torch.nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids_onehot)
         position_embeddings = self.position_embeddings(position_ids_onehot)
         embeddings = inputs_embeds + token_type_embeddings + position_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
+        embeddings = self.emb_LayerNorm(embeddings)
+        embeddings = self.emb_dropout(embeddings)
 
-        extended_attention_mask = attention_mask[:, None, None, :]
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(torch.float32).min
-
+        # [batch_sz, seq_len] -> [batch_sz, 1, 1, seq_len] filled with 0 or -inf
+        attention_mask = attention_mask[:, None, None, :]
+        attention_mask = (1.0 - attention_mask) * torch.finfo(torch.float32).min
         hidden_states = embeddings
-        attention_mask=extended_attention_mask
-
         for i, layer_module in enumerate(self.layer):
-            assert hidden_states.shape == (batch_sz, seq_length, hidden_size)
+            assert hidden_states.shape == (batch_sz, seq_len, hidden_size)
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask
             )
 
+        # unmasking predictions
         predictions = self.pretrain_head_dense(hidden_states)
         predictions = self.pretrain_head_actfn(predictions)
         predictions = self.pretrain_head_LayerNorm(predictions)
-        predictions = predictions @ self.word_embeddings.weight + self.pretrain_head_bias
+        predictions = predictions @ self.word_embeddings.weight
+        predictions = predictions + self.pretrain_head_bias
         return hidden_states, predictions
 
     def load_hf_state_dict(self, state_dict):
@@ -137,9 +142,9 @@ class MyBERT(torch.nn.Module):
             state_dict['bert.embeddings.position_embeddings.weight'].T)
         self.token_type_embeddings.weight.copy_(
             state_dict['bert.embeddings.token_type_embeddings.weight'].T)
-        self.LayerNorm.weight.copy_(
+        self.emb_LayerNorm.weight.copy_(
             state_dict['bert.embeddings.LayerNorm.weight'])
-        self.LayerNorm.bias.copy_(
+        self.emb_LayerNorm.bias.copy_(
             state_dict['bert.embeddings.LayerNorm.bias'])
 
         for i in range(len(self.layer)):
