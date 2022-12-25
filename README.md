@@ -1,5 +1,25 @@
 ### Run the test
+Run `test.py` for twice, one to unmask using Huggingface's implementation and to save its model checkpoint; another one to load the checkpoint and run our own code to reproduce the predictions:
 ```sh
+$ python test.py
+Downloading:  100%|██████▋| 420M/420M [01:12<00:00, 6.91MB/s]
+Some weights of BertForPreTraining were not initialized from the model checkpoint at bert-base-uncased and are newly initialized: ['cls.predictions.decoder.bias']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+          [CLS] ['.', 'the', ',', ')', '"']
+            she ['she', 'he', 'her', 'they', 'who']
+          likes ['likes', 'loves', 'enjoys', 'prefers', 'like']
+         riding ['riding', 'ride', 'rode', 'rides', 'on']
+              a ['a', 'her', 'the', 'riding', 'with']
+         [MASK] ['bike', 'horse', 'bicycle', 'motorcycle', 'pony']
+        because ['because', 'since', '.', 'and', 'after']
+         [MASK] ['she', 'he', 'it', 'everyone', 'her']
+          rides ['rides', 'rode', 'ride', 'riding', 'is']
+             in ['in', 'during', 'from', 'back', 'since']
+         [MASK] ['her', 'his', 'their', 'early', 'the']
+      childhood ['childhood', 'time', 'school', 'home', 'age']
+              . ['.', ';', '!', ',', '?']
+          [SEP] ['she', '.', ',', 'her', 'in']
+
 $ python test.py
 bert.embeddings.position_ids
 bert.embeddings.word_embeddings.weight
