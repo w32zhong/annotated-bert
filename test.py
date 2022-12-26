@@ -40,11 +40,12 @@ def test(test_args=None):
             if test_layer == hook_layer:
                 visualize_att(hook_layer, tokens, data)
         elif hook_name == 'intermediate':
-            test_layer = test_args - 1
-            hook_layer, intermediate_output = hook_args
-            if test_layer == hook_layer:
-                torch.set_printoptions(profile="full")
-                print(intermediate_output)
+            hook_layer, x = hook_args
+            torch.set_printoptions(profile="full")
+            x = x.reshape(-1)
+            nonzero = x[x > 0] # for GELU, there could be negatives...
+            nonzero_ratio = nonzero.shape[0] / x.shape[0]
+            print(f'Layer#{hook_layer + 1} non-zero ratio:', nonzero_ratio)
 
     with torch.no_grad():
         if use_huggingface:
