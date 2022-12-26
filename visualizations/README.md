@@ -1,0 +1,13 @@
+## Attentions at each layer
+* ![](attentions/att_layer1.png)
+* ![](attentions/att_layer2.png)
+* ![](attentions/att_layer3.png)
+* ![](attentions/att_layer4.png)
+* ![](attentions/att_layer5.png)
+* ![](attentions/att_layer6.png)
+* ![](attentions/att_layer7.png)
+* ![](attentions/att_layer8.png)
+* ![](attentions/att_layer9.png)
+* ![](attentions/att_layer10.png)
+* ![](attentions/att_layer11.png)
+* ![](attentions/att_layer12.png)
