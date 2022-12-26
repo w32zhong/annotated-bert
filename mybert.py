@@ -50,7 +50,7 @@ class MyBertLayer(torch.nn.Module):
         # x.shape == (batch_sz, n_heads, seq_len, head_size)
         return x
 
-    def forward(self, inputs, attention_mask):
+    def forward(self, inputs, attention_mask, layer_idx, hook):
         # inputs.shape == (batch_sz, seq_len, hidden_size)
         key_layer = self.transpose_for_scores(self.key(inputs))
         value_layer = self.transpose_for_scores(self.value(inputs))
@@ -66,6 +66,7 @@ class MyBertLayer(torch.nn.Module):
         attention_scores = attention_scores + attention_mask # broadcast
         attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
         attention_probs = self.att_dropout(attention_probs)
+        hook(layer_idx, attention_probs)
 
         context_layer = attention_probs @ value_layer
         # context_layer.shape == (batch_sz, n_heads, seq_len, head_size)
@@ -102,7 +103,7 @@ class MyBERT(torch.nn.Module):
         # the last dense layer maps to vocabulary uses the tie_weights() in modeling_utils.py
         self.pretrain_head_bias = torch.nn.Parameter(torch.zeros(vocab_size))
 
-    def forward(self, input_ids, token_type_ids, attention_mask):
+    def forward(self, input_ids, token_type_ids, attention_mask, hook):
         batch_sz, seq_len = input_ids.shape
         position_ids = torch.arange(max_position_embeddings).expand((1, -1))
         position_ids = position_ids[:, 0:seq_len]
@@ -127,7 +128,9 @@ class MyBERT(torch.nn.Module):
             assert hidden_states.shape == (batch_sz, seq_len, hidden_size)
             hidden_states = layer_module(
                 hidden_states,
-                attention_mask
+                attention_mask,
+                layer_idx=i,
+                hook=hook
             )
 
         # unmasking predictions
