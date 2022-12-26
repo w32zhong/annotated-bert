@@ -20,11 +20,11 @@ def visualize_att(layer, tokens, attentions):
         ax.set_yticklabels(tokens, rotation=0)
         ax.grid()
     fig.tight_layout()
-    plt.savefig(f'att_layer{layer+1}.png')
-    #plt.show()
+    #plt.savefig(f'att_layer{layer+1}.png')
+    plt.show()
 
 
-def test(args=None):
+def test(test_args=None):
     use_huggingface = not os.path.exists('./test')
     text = "She likes riding a [MASK] because [MASK] rides in [MASK] childhood."
 
@@ -32,10 +32,19 @@ def test(args=None):
     encoded_input = tokenizer(text, return_tensors='pt')
     tokens = tokenizer.convert_ids_to_tokens(encoded_input['input_ids'][0])
 
-    def hook_func(layer, data):
-        #target_layer = args - 1
-        #if target_layer == layer:
-        visualize_att(layer, tokens, data)
+    def hook_func(hook_name, *hook_args):
+        if hook_name == 'attentions':
+            return # disabled
+            test_layer = test_args - 1
+            hook_layer, data = hook_args
+            if test_layer == hook_layer:
+                visualize_att(hook_layer, tokens, data)
+        elif hook_name == 'intermediate':
+            test_layer = test_args - 1
+            hook_layer, intermediate_output = hook_args
+            if test_layer == hook_layer:
+                torch.set_printoptions(profile="full")
+                print(intermediate_output)
 
     with torch.no_grad():
         if use_huggingface:

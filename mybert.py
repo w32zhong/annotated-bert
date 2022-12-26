@@ -34,9 +34,10 @@ class MyBertLayer(torch.nn.Module):
         self.out_LayerNorm = torch.nn.LayerNorm(hidden_size, eps=layer_norm_eps)
         self.out_dropout   = torch.nn.Dropout(hidden_dropout_prob)
 
-    def feed_forward_chunk(self, att_out):
+    def feed_forward_chunk(self, layer_idx, att_out, hook):
         intermediate_output = self.intermediate(att_out)
         intermediate_output = self.intermediate_act_fn(intermediate_output)
+        hook('intermediate', layer_idx, intermediate_output)
 
         hidden_states = self.out_dense(intermediate_output)
         hidden_states = self.out_dropout(hidden_states)
@@ -66,7 +67,7 @@ class MyBertLayer(torch.nn.Module):
         attention_scores = attention_scores + attention_mask # broadcast
         attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
         attention_probs = self.att_dropout(attention_probs)
-        hook(layer_idx, attention_probs)
+        hook('attentions', layer_idx, attention_probs)
 
         context_layer = attention_probs @ value_layer
         # context_layer.shape == (batch_sz, n_heads, seq_len, head_size)
@@ -80,7 +81,7 @@ class MyBertLayer(torch.nn.Module):
         logits_layer = self.attout_dropout(logits_layer)
         logits_layer = self.attout_LayerNorm(logits_layer + inputs) # skip link
 
-        layer_output = self.feed_forward_chunk(logits_layer)
+        layer_output = self.feed_forward_chunk(layer_idx, logits_layer, hook)
         return layer_output
 
 class MyBERT(torch.nn.Module):
