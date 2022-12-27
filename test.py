@@ -39,13 +39,24 @@ def test(test_args=None):
             hook_layer, data = hook_args
             if test_layer == hook_layer:
                 visualize_att(hook_layer, tokens, data)
+
         elif hook_name == 'intermediate':
+            return # disabled
             hook_layer, x = hook_args
-            torch.set_printoptions(profile="full")
             x = x.reshape(-1)
             nonzero = x[x > 0] # for GELU, there could be negatives...
             nonzero_ratio = nonzero.shape[0] / x.shape[0]
             print(f'Layer#{hook_layer + 1} non-zero ratio:', nonzero_ratio)
+
+        elif hook_name in ['skiplink_mlp', 'skiplink_att']:
+            test_layer, test_head = test_args
+            hook_layer, path1, path2 = hook_args
+            if test_layer - 1 == hook_layer:
+                torch.set_printoptions(profile="full")
+                print(path1[0][test_head][:64])
+                print('-' * 30)
+                print(path2[0][test_head][:64])
+                print('=' * 30)
 
     with torch.no_grad():
         if use_huggingface:

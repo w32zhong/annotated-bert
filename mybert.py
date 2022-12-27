@@ -41,6 +41,7 @@ class MyBertLayer(torch.nn.Module):
 
         hidden_states = self.out_dense(intermediate_output)
         hidden_states = self.out_dropout(hidden_states)
+        hook('skiplink_mlp', layer_idx, hidden_states, att_out)
         hidden_states = self.out_LayerNorm(hidden_states + att_out) # skip link
         return hidden_states
 
@@ -79,6 +80,7 @@ class MyBertLayer(torch.nn.Module):
 
         logits_layer = self.attout_dense(context_layer)
         logits_layer = self.attout_dropout(logits_layer)
+        hook('skiplink_att', layer_idx, logits_layer, inputs)
         logits_layer = self.attout_LayerNorm(logits_layer + inputs) # skip link
 
         layer_output = self.feed_forward_chunk(layer_idx, logits_layer, hook)
